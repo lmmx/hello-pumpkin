@@ -8,9 +8,9 @@ fn main() {
     // Create a solver with default settings
     let mut solver = Solver::default();
 
-    // Create two integer variables x and y, each with a domain [0..20].
-    let x = solver.new_bounded_integer(0, 24);
-    let y = solver.new_bounded_integer(0, 24);
+    // Create two integer variables x and y, each with a domain [0..12].
+    let x = solver.new_bounded_integer(0, 12);
+    let y = solver.new_bounded_integer(0, 12);
 
     // Enforce the constraint: x + y = 12
     _ = solver
