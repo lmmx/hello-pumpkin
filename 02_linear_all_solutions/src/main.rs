@@ -1,7 +1,7 @@
+use pumpkin_solver::results::solution_iterator::IteratedSolution;
 use pumpkin_solver::results::{ProblemSolution, SatisfactionResult};
 use pumpkin_solver::termination::Indefinite;
 use pumpkin_solver::{constraints, Solver};
-use pumpkin_solver::results::solution_iterator::IteratedSolution;
 
 fn main() {
     println!("Finding all solutions to x + y = 12");
@@ -9,9 +9,9 @@ fn main() {
     // Create a solver with default settings
     let mut solver = Solver::default();
 
-    // Create two integer variables x and y, each with a domain [0..24].
-    let x = solver.new_bounded_integer(0, 24);
-    let y = solver.new_bounded_integer(0, 24);
+    // Create two integer variables x and y, each with a domain [0..12].
+    let x = solver.new_bounded_integer(0, 12);
+    let y = solver.new_bounded_integer(0, 12);
 
     // Enforce the constraint: x + y = 12
     _ = solver
@@ -24,7 +24,7 @@ fn main() {
 
     // Get an iterator over all solutions
     let mut solution_iterator = solver.get_solution_iterator(&mut brancher, &mut termination);
-    
+
     // Counter for the number of solutions
     let mut solution_count = 0;
 
@@ -36,21 +36,21 @@ fn main() {
                 let x_val = solution.get_integer_value(x);
                 let y_val = solution.get_integer_value(y);
                 println!("Solution {}: x={}, y={}", solution_count, x_val, y_val);
-            },
+            }
             IteratedSolution::Finished => {
                 println!("No more solutions exist.");
                 break;
-            },
+            }
             IteratedSolution::Unknown => {
                 println!("The solver terminated without finding all solutions.");
                 break;
-            },
+            }
             IteratedSolution::Unsatisfiable => {
                 println!("Problem is unsatisfiable.");
                 break;
             }
         }
     }
-    
+
     println!("Found {} solutions in total.", solution_count);
 }
