@@ -1,4 +1,4 @@
-## 3: Simple linear constraints
+## 3: Simple linear constraints (multiple constraints)
 
 Solve x + y = 12 and x - y >= 4 for variables (x,y) each in [0,12]
 
