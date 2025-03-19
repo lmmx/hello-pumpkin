@@ -1,18 +1,28 @@
-## 9: Path Finding in a Graph
+## 9: Path Finding
 
-Demonstrates how to use Pumpkin solver for a simple path finding problem in a graph. The problem involves finding a path from node 0 to node 4 with length <= 3 in a small graph.
+Solves a path finding problem in a small graph.
+
+We have 6 nodes (0-5) connected by edges. We want to find a path from node 0 to node 5 of length 3 (i.e., 4 nodes). Each node in the path must be connected to the next by an edge.
 
 ### Output
 
 ```
-Simple path finding in a graph
-Finding a path from node 0 to node 4 with length <= 3
+Path finding problem in a small graph:
+We have 6 nodes (0-5) connected by edges
+We want to find a path from node 0 to node 5 of length 3 (i.e., 4 nodes)
+Each node in the path must be connected to the next by an edge
 
-Found a path from node 0 to node 4:
-Path: [0, 2, 4]
-Path length: 2
+Graph structure:
+Edges: [(0, 1), (0, 2), (1, 2), (1, 3), (2, 3), (2, 4), (3, 4), (3, 5), (4, 5)]
 
-Verifying that all consecutive nodes in the path are connected:
-Edge (0, 2) exists: true
-Edge (2, 4) exists: true
+Found a valid path:
+  Path: [0, 1, 3, 5]
+
+Verification:
+  Starts at node 0: true
+  Ends at node 5: true
+  All nodes are different: true
+  Edge (0, 1) exists: true
+  Edge (1, 3) exists: true
+  Edge (3, 5) exists: true
 ```

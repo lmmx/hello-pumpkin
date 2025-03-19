@@ -1,126 +1,118 @@
-use pumpkin_solver::predicates::IntegerPredicate;
-use pumpkin_solver::results::{ProblemSolution, SatisfactionResult};
+use pumpkin_solver::results::ProblemSolution;
 use pumpkin_solver::termination::Indefinite;
-use pumpkin_solver::{constraints, predicate, Solver};
+use pumpkin_solver::{constraints, predicate, Solver, variables::IntegerVariable};
 
 fn main() {
-    println!("Simple path finding in a graph");
-    println!("Finding a path from node 0 to node 4 with length <= 3");
+    println!("Path finding problem in a small graph:");
+    println!("We have 6 nodes (0-5) connected by edges");
+    println!("We want to find a path from node 0 to node 5 of length 3 (i.e., 4 nodes)");
+    println!("Each node in the path must be connected to the next by an edge");
 
+    // Define our graph: a list of edges (node1, node2)
+    let edges = vec![
+        (0, 1), (0, 2), 
+        (1, 2), (1, 3), 
+        (2, 3), (2, 4), 
+        (3, 4), (3, 5), 
+        (4, 5)
+    ];
+    
+    // Print the graph structure
+    println!("\nGraph structure:");
+    println!("Edges: {:?}", edges);
+    
     // Create a solver with default settings
     let mut solver = Solver::default();
 
-    // Number of nodes in our graph
-    let n_nodes = 5;
+    // Path length (number of nodes - 1 = number of edges in the path)
+    let path_length = 3;
     
-    // Define edges in our graph: (from, to)
-    let edges = [
-        (0, 1), (0, 2),  // Edges from node 0
-        (1, 2), (1, 3),  // Edges from node 1
-        (2, 3), (2, 4),  // Edges from node 2
-        (3, 4),          // Edge from node 3
-    ];
-    
-    // Create variables representing the position of each node in the path
-    // -1 means the node is not in the path
-    // A value 0..n_nodes-1 indicates the position in the path
-    let position = (0..n_nodes)
-        .map(|_| solver.new_bounded_integer(-1, (n_nodes - 1) as i32))
-        .collect::<Vec<_>>();
-    
-    // Source node (node 0) must be at position 0
-    _ = solver
-        .add_constraint(constraints::equals(vec![position[0]], 0))
-        .post();
-
-    // Target node (node 4) must be in the path (position >= 0)
-    let target_in_path = solver.get_literal(predicate!(position[4] >= 0));
-    _ = solver.add_clause([target_in_path]);
-    
-    // Each position in the path can be occupied by at most one node
-    for pos in 0..(n_nodes-1) {
-        for i in 0..n_nodes {
-            for j in (i+1)..n_nodes {
-                let i_at_pos = solver.get_literal(predicate!(position[i] == pos));
-                let j_at_pos = solver.get_literal(predicate!(position[j] == pos));
-                _ = solver.add_clause([-i_at_pos, -j_at_pos]);
-            }
-        }
+    // Create variables for each position in the path
+    let mut path = Vec::new();
+    for i in 0..=path_length {
+        path.push(solver.new_bounded_integer(0, 5));
     }
     
-    // Nodes at consecutive positions in the path must be connected by an edge
-    for i in 0..n_nodes {
-        for pos in 0..(n_nodes-2) {
-            let i_at_pos = solver.get_literal(predicate!(position[i] == pos));
+    // Start at node 0 and end at node 5
+    _ = solver
+        .add_constraint(constraints::equals(vec![path[0]], 0))
+        .post();
+    
+    _ = solver
+        .add_constraint(constraints::equals(vec![path[path_length]], 5))
+        .post();
+    
+    // All nodes in the path must be different (no cycles)
+    _ = solver
+        .add_constraint(constraints::all_different(path.clone()))
+        .post();
+    
+    // For each step in the path, the nodes must be connected by an edge
+    for i in 0..path_length {
+        // Create a disjunction of edge constraints
+        let mut edge_constraints = Vec::new();
+        
+        for (from, to) in &edges {
+            // Check if the edge (from, to) matches (path[i], path[i+1])
+            let forward_edge = solver.get_literal(predicate!(
+                path[i] == *from && path[i+1] == *to
+            ));
             
-            // If node i is at position pos, then some node j connected to i must be at position pos+1
-            let mut clause = vec![-i_at_pos];
+            // Check if the edge (to, from) matches (path[i], path[i+1]) - for undirected graphs
+            let backward_edge = solver.get_literal(predicate!(
+                path[i] == *to && path[i+1] == *from
+            ));
             
-            for &(from, to) in &edges {
-                if from == i {
-                    let j_at_next_pos = solver.get_literal(predicate!(position[to] == pos + 1));
-                    clause.push(j_at_next_pos);
-                } else if to == i {
-                    // Consider edges in both directions
-                    let j_at_next_pos = solver.get_literal(predicate!(position[from] == pos + 1));
-                    clause.push(j_at_next_pos);
-                }
-            }
-            
-            _ = solver.add_clause(clause);
+            edge_constraints.push(forward_edge);
+            edge_constraints.push(backward_edge);
         }
+        
+        // At least one edge constraint must be satisfied
+        _ = solver.add_clause(edge_constraints);
     }
     
     // Configure an indefinite termination condition and a default branching strategy
     let mut termination = Indefinite;
     let mut brancher = solver.default_brancher_over_all_propositional_variables();
 
-    // Find a solution
+    // Solve the problem
     match solver.satisfy(&mut brancher, &mut termination) {
-        SatisfactionResult::Satisfiable(solution) => {
+        pumpkin_solver::results::SatisfactionResult::Satisfiable(solution) => {
+            println!("\nFound a valid path:");
+            
             // Extract the path
-            let mut path = vec![];
-            let mut max_pos = -1;
-            
-            for i in 0..n_nodes {
-                let pos = solution.get_integer_value(position[i]);
-                if pos >= 0 {
-                    path.push((pos, i));
-                    max_pos = max_pos.max(pos);
-                }
+            let mut path_values = Vec::new();
+            for var in &path {
+                path_values.push(solution.get_integer_value(*var));
             }
             
-            // Sort by position
-            path.sort_by_key(|&(pos, _)| pos);
+            println!("  Path: {:?}", path_values);
             
-            println!("\nFound a path from node 0 to node 4:");
+            // Verify path constraints
+            println!("\nVerification:");
             
-            let path_nodes: Vec<_> = path.iter().map(|&(_, node)| node).collect();
-            println!("Path: {:?}", path_nodes);
-            println!("Path length: {}", max_pos);
+            // Start and end nodes
+            println!("  Starts at node 0: {}", path_values[0] == 0);
+            println!("  Ends at node 5: {}", path_values[path_length] == 5);
             
-            // Verify that all consecutive nodes in the path are connected by an edge
-            println!("\nVerifying that all consecutive nodes in the path are connected:");
-            for i in 0..path.len()-1 {
-                let (_, node1) = path[i];
-                let (_, node2) = path[i+1];
+            // All nodes are different
+            let unique_nodes = path_values.iter().collect::<std::collections::HashSet<_>>().len();
+            println!("  All nodes are different: {}", unique_nodes == path_values.len());
+            
+            // Valid edges
+            for i in 0..path_length {
+                let from = path_values[i];
+                let to = path_values[i+1];
                 
-                let is_connected = edges.iter().any(|&(from, to)| 
-                    (from == node1 && to == node2) || (from == node2 && to == node1)
-                );
-                
-                println!("Edge ({}, {}) exists: {}", node1, node2, is_connected);
-                
-                if !is_connected {
-                    println!("ERROR: The path is invalid!");
-                }
+                let edge_exists = edges.contains(&(from, to)) || edges.contains(&(to, from));
+                println!("  Edge ({}, {}) exists: {}", from, to, edge_exists);
             }
         }
-        SatisfactionResult::Unsatisfiable => {
-            println!("No path exists with the given constraints.");
+        pumpkin_solver::results::SatisfactionResult::Unsatisfiable => {
+            println!("\nNo valid path exists for the given constraints.");
         }
-        SatisfactionResult::Unknown => {
-            println!("The solver could not determine satisfiability within the termination condition.");
+        pumpkin_solver::results::SatisfactionResult::Unknown => {
+            println!("\nThe solver could not determine if a valid path exists within the termination condition.");
         }
     }
 }

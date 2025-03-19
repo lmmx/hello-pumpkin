@@ -1,120 +1,134 @@
-use pumpkin_solver::results::{OptimisationResult, ProblemSolution};
+use pumpkin_solver::results::ProblemSolution;
 use pumpkin_solver::termination::Indefinite;
-use pumpkin_solver::{constraints, Solver};
+use pumpkin_solver::{constraints, Solver, variables::IntegerVariable};
 
 fn main() {
-    println!("Simple machine scheduling with the cumulative constraint");
-    println!("Scheduling 4 tasks with different durations and resource requirements");
-    println!("Goal: Minimize the makespan (completion time of all tasks)");
+    println!("Scheduling problem with the cumulative constraint:");
+    println!("We have 4 tasks with different durations and resource requirements");
+    println!("Tasks must be scheduled between time 0 and 10");
+    println!("The total resource usage at any time point cannot exceed 5");
 
     // Create a solver with default settings
     let mut solver = Solver::default();
 
-    // Define 4 tasks with: [duration, resource_requirement]
-    let tasks = [
-        [3, 2], // Task 0: duration=3, resources=2
-        [2, 3], // Task 1: duration=2, resources=3
-        [4, 1], // Task 2: duration=4, resources=1
-        [1, 4], // Task 3: duration=1, resources=4
-    ];
+    // Create 4 tasks with start times between 0 and 10
+    let num_tasks = 4;
+    let mut start_times = Vec::new();
+    for _ in 0..num_tasks {
+        start_times.push(solver.new_bounded_integer(0, 10));
+    }
 
-    // Maximum resource capacity available at any time
-    let capacity = 4;
-    
-    // Calculate a horizon (upper bound on the makespan)
-    let horizon: i32 = tasks.iter().map(|t| t[0]).sum();
-    
-    // Create start time variables for each task
-    let start_times: Vec<_> = tasks
-        .iter()
-        .map(|task| solver.new_bounded_integer(0, horizon - task[0]))
-        .collect();
+    // Fixed durations for each task
+    let durations = vec![2, 3, 4, 2];
 
-    // Create durations and resource requirements arrays for the cumulative constraint
-    let durations: Vec<i32> = tasks.iter().map(|t| t[0]).collect();
-    let resource_reqs: Vec<i32> = tasks.iter().map(|t| t[1]).collect();
+    // Fixed resource requirements for each task
+    let resources = vec![1, 2, 3, 2];
 
-    // Post the cumulative constraint
+    // Maximum resource capacity at any time
+    let capacity = 5;
+
+    // Add the cumulative constraint
     _ = solver
         .add_constraint(constraints::cumulative(
             start_times.clone(),
-            durations,
-            resource_reqs,
+            durations.clone(),
+            resources.clone(),
             capacity,
         ))
         .post();
 
-    // Create a makespan variable representing when all tasks are done
-    let makespan = solver.new_bounded_integer(0, horizon);
-
-1 * makespan.scaled(1)))
-            .post();
-    }
+    // We require task1 to start after task0 ends
+    _ = solver
+        .add_constraint(constraints::less_than_or_equals(
+            vec![
+                start_times[0].scaled(1),
+                start_times[1].scaled(-1),
+            ],
+            -durations[0],
+        ))
+        .post();
 
     // Configure an indefinite termination condition and a default branching strategy
     let mut termination = Indefinite;
     let mut brancher = solver.default_brancher_over_all_propositional_variables();
 
-    // Maximize the negative of makespan (equivalent to minimizing makespan)
-    match solver.maximise(&mut brancher, &mut termination, makespan.scaled(-1)) {
-        OptimisationResult::Optimal(solution) => {
-            let makespan_val = solution.get_integer_value(makespan);
+    // Solve the problem
+    match solver.satisfy(&mut brancher, &mut termination) {
+        pumpkin_solver::results::SatisfactionResult::Satisfiable(solution) => {
+            println!("Found a valid schedule:");
             
-            println!("\nOptimal solution found with makespan: {}", makespan_val);
-            println!("\nTask scheduling details:");
-            println!("Task | Start | End | Duration | Resources");
-            println!("-----------------------------------------");
-            
-            // Print details of each task
-            for (i, start) in start_times.iter().enumerate() {
-                let start_val = solution.get_integer_value(*start);
-                let end_val = start_val + tasks[i][0];
-                println!(" {}   |   {}   |  {}  |    {}     |    {}    ",
-                         i, start_val, end_val, tasks[i][0], tasks[i][1]);
-            }
-            
-            // Print a simple visualization of the schedule
-            println!("\nSchedule visualization (time units):");
-            println!("0    1    2    3    4    5    6    7    8    9");
-            println!("---------------------------------------------- ");
-            
-            for (i, start) in start_times.iter().enumerate() {
-                let start_val = solution.get_integer_value(*start) as usize;
-                let end_val = start_val + tasks[i][0] as usize;
+            // Display the solution
+            let mut task_schedules = Vec::new();
+            for i in 0..num_tasks {
+                let start = solution.get_integer_value(start_times[i]);
+                let end = start + durations[i];
+                let resource = resources[i];
                 
-                // Create a visualization line
-                let mut line = " ".repeat(50);
-                for t in start_val..end_val {
-                    if t < line.len() {
-                        line.replace_range(t..t+1, &i.to_string());
-                    }
-                }
-                println!("{}", line);
+                task_schedules.push((i, start, end, resource));
+                
+                println!("  Task {} starts at time {}, ends at time {}, and uses {} resources",
+                         i, start, end, resource);
             }
             
-            // Verify that the resource constraint is satisfied
-            println!("\nVerifying resource constraints are satisfied at each time point:");
-            for t in 0..=makespan_val {
-                let mut used_resources = 0;
-                for (i, start) in start_times.iter().enumerate() {
-                    let start_val = solution.get_integer_value(*start);
-                    let end_val = start_val + tasks[i][0];
-                    if start_val <= t && t < end_val {
-                        used_resources += tasks[i][1];
+            // Visualize the schedule with a simple timeline
+            println!("\nSchedule visualization (. = free, # = resource unit in use):");
+            let max_time = task_schedules.iter().map(|(_, _, end, _)| *end).max().unwrap_or(0);
+            
+            // Print timeline header
+            print!("Time: ");
+            for t in 0..=max_time {
+                print!("{}", t % 10);
+            }
+            println!();
+            
+            // Print task schedules
+            for (i, start, end, resource) in &task_schedules {
+                print!("Task{}: ", i);
+                for t in 0..=max_time {
+                    if *start <= t && t < *end {
+                        // Task is active at this time
+                        print!("{}", "#".repeat(*resource as usize));
+                    } else {
+                        // Task is not active at this time
+                        print!(".");
                     }
                 }
-                println!("Time {}: {} resources used (capacity: {})", 
-                         t, used_resources, capacity);
+                println!();
             }
+            
+            // Print resource usage timeline
+            print!("Usage: ");
+            for t in 0..=max_time {
+                let usage: i32 = task_schedules.iter()
+                    .filter(|(_, start, end, _)| *start <= t && t < *end)
+                    .map(|(_, _, _, resource)| *resource)
+                    .sum();
+                print!("{}", usage);
+            }
+            println!();
+            
+            // Verify resource constraints
+            println!("\nVerification:");
+            for t in 0..=max_time {
+                let usage: i32 = task_schedules.iter()
+                    .filter(|(_, start, end, _)| *start <= t && t < *end)
+                    .map(|(_, _, _, resource)| *resource)
+                    .sum();
+                println!("  Time {}: Resource usage = {} (limit = {})", t, usage, capacity);
+                assert!(usage <= capacity, "Resource constraint violated at time {}", t);
+            }
+            
+            // Verify precedence constraint: task1 starts after task0 ends
+            let task0_end = task_schedules[0].1 + durations[0];
+            let task1_start = task_schedules[1].1;
+            println!("  Task 1 starts at {} which is after Task 0 ends at {} (should be true): {}",
+                     task1_start, task0_end, task1_start >= task0_end);
         }
-        OptimisationResult::Satisfiable(solution) => {
-            println!("Found a solution but optimality not proven.");
+        pumpkin_solver::results::SatisfactionResult::Unsatisfiable => {
+            println!("No valid schedule exists for the given constraints.");
         }
-        OptimisationResult::Unsatisfiable => {
-            println!("Problem is unsatisfiable.");
-        }
-        OptimisationResult::Unknown => {
-            println!("Could not determine optimality within the termination condition.");
+        pumpkin_solver::results::SatisfactionResult::Unknown => {
+            println!("The solver could not determine if a valid schedule exists within the termination condition.");
         }
     }
 }
