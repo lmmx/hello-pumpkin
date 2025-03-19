@@ -28,6 +28,16 @@ fn main() {
     // Maximum resource capacity at any time
     let capacity = 5;
 
+    // If you want all tasks to finish by time 10, enforce: start_time[i] + duration[i] <= 10
+    for (i, st) in start_times.iter().enumerate() {
+        let _ = solver
+            .add_constraint(constraints::less_than_or_equals(
+                vec![st.clone().scaled(1)],
+                10 - durations[i], // i.e. start_time[i] <= 10 - durations[i]
+            ))
+            .post();
+    }
+
     // Add the cumulative constraint
     _ = solver
         .add_constraint(constraints::cumulative(
